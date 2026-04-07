@@ -1,6 +1,6 @@
 ---
 name: spec-writer
-description: Generate AI-agent-friendly spec documents from verbal descriptions or existing requirement docs. Use when users say "写spec", "spec文档", "write spec", "需求讨论", "specification", "设计文档", "write a spec for", or discuss requirements they want formalized.
+description: Generate AI-agent-friendly spec documents from verbal descriptions or existing requirement docs. Use this skill whenever users discuss requirements, features, or system designs they want formalized — even if they don't say "spec" explicitly. Triggers include "写spec", "spec文档", "write spec", "需求讨论", "specification", "设计文档", "write a spec for", "帮我理清需求", "这个功能怎么设计", "PRD", "把需求整理一下", or any conversation where the user is describing what to build and would benefit from a structured document before implementation begins.
 metadata:
   version: 1.0.0
 ---
@@ -8,10 +8,6 @@ metadata:
 # Spec Writer
 
 Generate spec documents optimized for AI agent comprehension and execution.
-
-## Trigger
-
-`写spec`, `spec文档`, `write spec`, `需求讨论`, `specification`, `设计文档`
 
 ## Core Principle
 
@@ -68,6 +64,8 @@ Sections skipped: [list with reason]
 ```
 
 User can override ("add error handling" → add it).
+
+Why tier matters: AI agents tend to over-generate sections when given a full template. A Light spec with 6 sections keeps the agent focused on a single responsibility; a Full spec with 16 sections provides guardrails for complex systems where missing a priority conflict or invariant can cause production bugs. Choosing the right tier balances thoroughness against noise.
 
 ### Step 4: Generate v0 Spec
 
@@ -137,6 +135,68 @@ Additional sections: Priority Resolution, State/Lifecycle, Integration Points, I
 - Permission/auth behavior
 - External contract obligations
 
+## Example
+
+User: "我要做一个 webhook 转发服务，接收 GitHub webhook 然后转发到飞书群"
+
+**Step 1** — Input mode: Verbal description → Oral mode.
+
+**Step 2** — Extract core items:
+- **Goal**: Relay GitHub webhook events to Feishu group chat
+- **Inputs/Outputs**: GitHub POST payload → Feishu bot message
+- **Core Behavior**: Receive → validate → transform → forward → respond
+- **Done When**: `curl -X POST /webhook` with sample payload returns 200, Feishu group receives formatted message
+
+**Step 3** — Complexity: **Light** (single service, linear flow, no config conflicts)
+
+**Step 4** — Generate v0 spec:
+
+```markdown
+# GitHub-Feishu Webhook Relay
+
+Receives GitHub webhook events and forwards formatted notifications to a Feishu group bot.
+
+## Scope
+- Accept GitHub webhook POST requests
+- Validate webhook signature
+- Transform payload to Feishu message card format
+- Forward to Feishu bot via incoming webhook URL
+
+## Data Model
+
+### WebhookPayload (inbound)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| action | string | yes | Event action (opened, closed, etc.) |
+| repository | object | yes | Repo name, URL |
+| sender | object | yes | Who triggered the event |
+
+[ASSUMPTION: Only push and pull_request events needed, based on user mentioning "webhook" generically]
+
+## Core Behavior
+
+1. Receive POST at `/webhook`
+2. Validate `X-Hub-Signature-256` header against secret
+3. Parse event type from `X-GitHub-Event` header
+4. Transform payload into Feishu message card JSON
+5. POST to Feishu bot webhook URL
+6. Return 200 to GitHub
+
+## Done When
+
+- [ ] `curl -X POST /webhook` with valid signature returns 200
+- [ ] Feishu group receives formatted message within 3 seconds
+- [ ] Invalid signature returns 401
+
+## Assumptions
+
+- [ASSUMPTION: Single Feishu group target. Based on user saying "飞书群" (singular)]
+- [ASSUMPTION: No retry on Feishu delivery failure. Not mentioned by user]
+```
+
+**Step 5** — User reviews, corrects assumptions, iterates.
+
 ## Quality Checks
 
 Before delivering any spec version, verify:
@@ -150,7 +210,7 @@ Before delivering any spec version, verify:
 
 ## Language
 
-Write the spec in the same language the user uses. If the user speaks Chinese, write in Chinese with technical terms in English (URL, HTTP, API, etc.). If the user speaks English, write entirely in English.
+Write the spec in the same language the user uses. If the user speaks Chinese, write in Chinese with technical terms in English (URL, HTTP, API, etc.). If the user speaks English, write entirely in English. If the user mixes languages (e.g., Chinese with English technical jargon), follow the dominant language for prose and keep technical terms in their original form. When in doubt, match the language of the user's most recent message.
 
 ## What This Skill Does NOT Do
 
@@ -158,3 +218,6 @@ Write the spec in the same language the user uses. If the user speaks Chinese, w
 - Does not generate project scaffolding or boilerplate
 - Does not create CLAUDE.md or AGENTS.md files
 - Does not manage spec versioning or history
+- Does not ask more than 1 round of clarifying questions before generating v0 — draft first, iterate later
+- Does not generate code alongside the spec (examples in spec use pseudocode or JSON, not runnable code)
+- Does not expand scope beyond what the user described (no unsolicited "you should also consider..." sections)
